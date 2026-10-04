@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'">
+  <meta name="theme-color" content="#ffd6e7">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="キャラずかん">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>わたしのキャラずかん</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <button type="button" class="icon-btn" id="back-btn" aria-label="もどる">
+      <span aria-hidden="true">‹</span>
+    </button>
+    <h1 class="title"><a href="#/" id="title-link">わたしの<br class="sp-only">キャラずかん</a></h1>
+    <a class="icon-btn" href="#/settings" id="settings-btn" aria-label="せってい">
+      <span aria-hidden="true">⚙︎</span>
+    </a>
+  </header>
+
+  <main id="main">
+    <!-- 1. ずかん(いちらん) -->
+    <section class="view" id="view-list" hidden>
+      <div class="empty" id="empty" hidden>
+        <div class="empty-art" aria-hidden="true">✨📖✨</div>
+        <p class="empty-title">さいしょのキャラを<br>とうろくしよう!</p>
+        <p class="empty-text">かみにかいた キャラのえを<br>しゃしんで とりこめるよ</p>
+        <a class="btn btn-primary btn-big" href="#/new">＋ キャラをとうろくする</a>
+      </div>
+      <p class="count" id="count" hidden></p>
+      <ul class="cards" id="cards"></ul>
+      <a class="fab" href="#/new" id="fab" hidden aria-label="キャラをふやす">＋</a>
+    </section>
+
+    <!-- 2. しょうさい -->
+    <section class="view" id="view-detail" hidden>
+      <article class="detail">
+        <div class="detail-photo">
+          <img id="detail-img" alt="">
+        </div>
+        <h2 class="detail-name" id="detail-name"></h2>
+        <p class="detail-catch" id="detail-catch" hidden></p>
+        <dl class="detail-list" id="detail-list"></dl>
+        <div class="row">
+          <a class="btn btn-secondary" id="detail-edit">✏️ なおす</a>
+          <button type="button" class="btn btn-danger" id="detail-delete">🗑 けす</button>
+        </div>
+      </article>
+    </section>
+
+    <!-- 3. とうろく / なおす -->
+    <section class="view" id="view-edit" hidden>
+      <form class="form" id="edit-form" autocomplete="off" novalidate>
+        <h2 class="form-title" id="edit-title">キャラをとうろくする</h2>
+
+        <div class="photo-pick">
+          <div class="photo-circle" id="photo-preview">
+            <span class="photo-placeholder" id="photo-placeholder">🖍<br>えを<br>いれてね</span>
+            <img id="photo-img" alt="" hidden>
+          </div>
+          <label class="btn btn-primary">
+            📷 しゃしんをとる/えらぶ
+            <input type="file" accept="image/*" id="photo-input" class="visually-hidden">
+          </label>
+          <button type="button" class="btn btn-secondary" id="recrop-btn" hidden>⭕ きりぬきをなおす</button>
+        </div>
+
+        <label class="field">
+          <span class="field-label">なまえ <span class="need">ひつよう</span></span>
+          <input type="text" name="name" maxlength="40" enterkeyhint="next">
+        </label>
+        <label class="field">
+          <span class="field-label">ねんれい</span>
+          <span class="age-wrap">
+            <input type="text" name="age" inputmode="numeric" pattern="[0-9]*" maxlength="6" enterkeyhint="next">
+            <span class="age-unit">さい</span>
+          </span>
+        </label>
+        <label class="field">
+          <span class="field-label">せいかく</span>
+          <textarea name="personality" rows="3" maxlength="400"></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label">すきなもの</span>
+          <textarea name="likes" rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label">にがてなもの</span>
+          <textarea name="dislikes" rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label">ひみつ 🤫</span>
+          <textarea name="secret" rows="2" maxlength="400"></textarea>
+        </label>
+        <label class="field">
+          <span class="field-label">くちぐせ <span class="opt">なくてもOK</span></span>
+          <input type="text" name="catchphrase" maxlength="80" enterkeyhint="done">
+        </label>
+
+        <p class="form-note" id="form-note" aria-live="polite"></p>
+
+        <div class="row">
+          <button type="button" class="btn btn-secondary" id="edit-cancel">やめる</button>
+          <button type="submit" class="btn btn-primary" id="edit-save">💾 ほぞんする</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 4. せってい(バックアップ) -->
+    <section class="view" id="view-settings" hidden>
+      <div class="panel">
+        <h2 class="panel-title">💾 バックアップ</h2>
+        <p>キャラのデータは、この きかいの中だけに ほぞんされているよ。
+          ときどき バックアップを かきだして、だいじに とっておこう。</p>
+        <button type="button" class="btn btn-primary btn-wide" id="export-btn">📤 バックアップをかきだす</button>
+        <label class="btn btn-secondary btn-wide">
+          📥 バックアップをよみこむ
+          <input type="file" id="import-input" class="visually-hidden">
+        </label>
+        <p class="small" id="storage-info"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- きりぬき がめん -->
+  <div class="overlay cropper" id="cropper" hidden>
+    <p class="cropper-help">ゆびで うごかして、まるの中に キャラをいれてね</p>
+    <div class="cropper-stage">
+      <canvas id="crop-canvas"></canvas>
+    </div>
+    <label class="zoom">
+      <span aria-hidden="true">🔍−</span>
+      <input type="range" id="crop-zoom" min="0" max="1000" value="500" aria-label="おおきさ">
+      <span aria-hidden="true">＋</span>
+    </label>
+    <div class="row">
+      <button type="button" class="btn btn-secondary" id="crop-cancel">やめる</button>
+      <button type="button" class="btn btn-primary" id="crop-ok">⭕ これでOK</button>
+    </div>
+  </div>
+
+  <!-- かくにん ダイアログ -->
+  <div class="overlay modal-wrap" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-text">
+      <p class="modal-text" id="modal-text"></p>
+      <div class="row">
+        <button type="button" class="btn btn-secondary" id="modal-no">やめる</button>
+        <button type="button" class="btn btn-primary" id="modal-yes">はい</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="busy" id="busy" hidden><div class="spinner" aria-label="まってね"></div></div>
+</body>
+</html>
