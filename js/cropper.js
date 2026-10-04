@@ -2,8 +2,6 @@
 // きりぬき位置は「元画像の座標での 円の中心(cx, cy)と 直径(d)」で表す。
 // 画面の大きさに左右されないので、あとで「きりぬきをなおす」ときに そのまま再現できる。
 
-import { canvasToBlob } from './image.js';
-
 const OUTPUT_SIZE = 800;     // できあがりの正方形の大きさ(px)
 const CIRCLE_RATIO = 0.44;   // キャンバスの はば に対する 円の半径
 const SLIDER_MAX = 1000;
@@ -37,7 +35,7 @@ export class Cropper {
 
   /**
    * きりぬき画面をひらく。
-   * @returns {Promise<{crop:{cx,cy,d}, blob:Blob} | null>} やめたときは null
+   * @returns {Promise<{crop:{cx,cy,d}} | null>} やめたときは null
    */
   open(img, crop) {
     this.close();
@@ -63,13 +61,12 @@ export class Cropper {
     if (this.resolve) this.finish(false);
   }
 
-  async finish(ok) {
+  finish(ok) {
     const res = this.resolve;
     this.resolve = null;
     let value = null;
     if (ok && this.img) {
-      const crop = { cx: this.cx, cy: this.cy, d: this.d };
-      value = { crop, blob: await renderCrop(this.img, crop) };
+      value = { crop: { cx: this.cx, cy: this.cy, d: this.d } };
     }
     this.overlay.hidden = true;
     document.body.classList.remove('no-scroll');
@@ -212,8 +209,8 @@ export class Cropper {
   }
 }
 
-/** 元画像と きりぬき位置から、正方形の JPEG をつくる(まるの外は白) */
-export async function renderCrop(img, crop) {
+/** 元画像と きりぬき位置から、正方形の キャンバスをつくる(まるの外は白) */
+export function renderCropCanvas(img, crop) {
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
   const out = document.createElement('canvas');
@@ -226,10 +223,7 @@ export async function renderCrop(img, crop) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, OUTPUT_SIZE / 2 - crop.cx * s, OUTPUT_SIZE / 2 - crop.cy * s, w * s, h * s);
-  const blob = await canvasToBlob(out);
-  out.width = 0;
-  out.height = 0;
-  return blob;
+  return out;
 }
 
 function mid(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }

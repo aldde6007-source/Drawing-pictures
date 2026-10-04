@@ -71,7 +71,7 @@
             📷 しゃしんをとる/えらぶ
             <input type="file" accept="image/*" id="photo-input" class="visually-hidden">
           </label>
-          <button type="button" class="btn btn-secondary" id="recrop-btn" hidden>⭕ きりぬきをなおす</button>
+          <button type="button" class="btn btn-secondary" id="recrop-btn" hidden>✂️ きりぬき・えのかんじを なおす</button>
         </div>
 
         <label class="field">
@@ -144,7 +144,29 @@
     </label>
     <div class="row">
       <button type="button" class="btn btn-secondary" id="crop-cancel">やめる</button>
-      <button type="button" class="btn btn-primary" id="crop-ok">⭕ これでOK</button>
+      <button type="button" class="btn btn-primary" id="crop-ok">つぎへ ▶</button>
+    </div>
+  </div>
+
+  <!-- えの かんじを えらぶ がめん -->
+  <div class="overlay cropper" id="styler" hidden>
+    <p class="cropper-help">えの かんじを えらんでね</p>
+    <div class="styler-preview">
+      <canvas id="style-canvas"></canvas>
+      <div class="spinner" id="style-spinner" aria-label="まってね" hidden></div>
+    </div>
+    <div class="chips" role="group" aria-label="えの かんじ">
+      <button type="button" class="chip" data-type="none" aria-pressed="false">📷 そのまま</button>
+      <button type="button" class="chip" data-type="manga" aria-pressed="false">🎨 まんがふう</button>
+    </div>
+    <div class="chips" id="style-levels" role="group" aria-label="つよさ">
+      <button type="button" class="chip chip-sm" data-level="1" aria-pressed="false">よわい</button>
+      <button type="button" class="chip chip-sm" data-level="2" aria-pressed="false">ふつう</button>
+      <button type="button" class="chip chip-sm" data-level="3" aria-pressed="false">つよい</button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn btn-secondary" id="style-back">◀ きりなおす</button>
+      <button type="button" class="btn btn-primary" id="style-ok">⭕ けってい</button>
     </div>
   </div>
 

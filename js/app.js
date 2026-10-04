@@ -1,6 +1,7 @@
 import * as db from './db.js';
 import { loadImage, resizeToJpeg } from './image.js';
-import { Cropper } from './cropper.js';
+import { Cropper, renderCropCanvas } from './cropper.js';
+import { Styler, normalizeStyle } from './styler.js';
 import { buildBackupFile, parseBackupFile } from './backup.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,6 +17,7 @@ const DETAIL_ROWS = [
 const DRAFT_DELAY = 400;
 
 const cropper = new Cropper();
+const styler = new Styler();
 const form = $('edit-form');
 
 // =====================================================================
@@ -71,6 +73,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('modal').hidden) closeModal(false);
   else if (cropper.isOpen) cropper.close();
+  else if (styler.isOpen) styler.close();
 });
 
 let busyCount = 0;
@@ -124,6 +127,7 @@ let renderSeq = 0;
 
 async function render() {
   cropper.close();
+  styler.close();
   if (modalResolve) closeModal(false);
   await leaveEdit();
 
@@ -252,10 +256,10 @@ async function renderDetail(id, seq) {
 // =====================================================================
 // 3. とうろく / なおす(下書きの自動保存つき)
 // =====================================================================
-let editing = null; // { key, id, base, original, image, crop, dirty, timer, writing, closed }
+let editing = null; // { key, id, base, original, image, crop, style, dirty, timer, writing, closed }
 
 function emptyEditing(id) {
-  return { key: id ? `edit:${id}` : 'new', id, base: null, original: null, image: null, crop: null, dirty: false, timer: 0, writing: Promise.resolve(), closed: false };
+  return { key: id ? `edit:${id}` : 'new', id, base: null, original: null, image: null, crop: null, style: null, dirty: false, timer: 0, writing: Promise.resolve(), closed: false };
 }
 
 async function enterEdit(id, seq) {
@@ -277,7 +281,7 @@ async function enterEdit(id, seq) {
   // なおすとちゅうの下書きは、元のキャラが そのあと かわっていなければ つかう
   const draftUsable = draft && (!id || draft.baseUpdatedAt === state.base.updatedAt);
   if (draftUsable) {
-    source = { ...draft.fields, original: draft.original, image: draft.image, crop: draft.crop };
+    source = { ...draft.fields, original: draft.original, image: draft.image, crop: draft.crop, style: draft.style };
     state.dirty = true;
   }
 
@@ -289,6 +293,7 @@ async function enterEdit(id, seq) {
   state.original = source ? source.original || null : null;
   state.image = source ? source.image || null : null;
   state.crop = source ? source.crop || null : null;
+  state.style = source ? normalizeStyle(source.style) : null;
   showEditPhoto();
 
   if (draftUsable) toast('とちゅうから つづきが かけるよ ✏️');
@@ -338,6 +343,7 @@ function saveDraftNow() {
     original: state.original,
     image: state.image,
     crop: state.crop,
+    style: state.style,
     savedAt: Date.now(),
   };
   state.writing = state.writing
@@ -385,6 +391,29 @@ form.addEventListener('input', (e) => {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveDraftNow(); });
 window.addEventListener('pagehide', () => saveDraftNow());
 
+/**
+ * きりぬき → えの かんじ の じゅんに えらんでもらう。
+ * 「きりなおす」で きりぬきに もどれる。やめたときは null。
+ */
+async function pickPicture(img, crop, style) {
+  for (;;) {
+    const c = await cropper.open(img, crop);
+    if (!c) return null;
+    crop = c.crop;
+    const canvas = renderCropCanvas(img, crop);
+    let s;
+    try {
+      s = await styler.open(canvas, style);
+    } finally {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    if (!s) return null;
+    style = s.style;
+    if (s.action === 'ok') return { crop, style, blob: s.blob };
+  }
+}
+
 $('photo-input').addEventListener('change', async (e) => {
   const input = e.target;
   const file = input.files && input.files[0];
@@ -406,11 +435,12 @@ $('photo-input').addEventListener('change', async (e) => {
       : friendlyError(err));
     return;
   }
-  const result = await cropper.open(img);
+  const result = await pickPicture(img, null, null);
   if (!result || state !== editing) return;
   state.original = await db.packBlob(originalBlob);
   state.image = await db.packBlob(result.blob);
   state.crop = result.crop;
+  state.style = result.style;
   showEditPhoto();
   markDirty();
   saveDraftNow();
@@ -427,10 +457,11 @@ $('recrop-btn').addEventListener('click', async () => {
     toast(friendlyError(err));
     return;
   }
-  const result = await cropper.open(img, state.crop);
+  const result = await pickPicture(img, state.crop, state.style);
   if (!result || state !== editing) return;
   state.image = await db.packBlob(result.blob);
   state.crop = result.crop;
+  state.style = result.style;
   showEditPhoto();
   markDirty();
   saveDraftNow();
@@ -459,6 +490,7 @@ form.addEventListener('submit', async (e) => {
     original: state.original,
     image: state.image,
     crop: state.crop,
+    style: state.style,
     createdAt: state.base ? state.base.createdAt : now,
     updatedAt: now,
   };

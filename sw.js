@@ -3,7 +3,7 @@
 // ★ アプリのファイルを かえたら、かならず VERSION の数字を 1つ ふやすこと。
 //   (sw.js の中身が かわると、ブラウザが あたらしい版を みつけて きりかえる)
 
-const VERSION = 1;
+const VERSION = 2;
 const CACHE = `chara-zukan-v${VERSION}`;
 
 const FILES = [
@@ -16,6 +16,8 @@ const FILES = [
   './js/image.js',
   './js/cropper.js',
   './js/backup.js',
+  './js/styler.js',
+  './js/manga-worker.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

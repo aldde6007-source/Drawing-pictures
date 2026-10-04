@@ -8,6 +8,7 @@
 docker compose up dev                                      # ローカルサーバー http://localhost:8000
 docker compose run --rm dev sh tools/check.sh              # JS/manifest の構文チェック
 docker compose run --rm dev python tools/make_icons.py     # icons/ を再生成
+docker compose run --rm dev python tools/try_manga.py <写真>  # まんがふうフィルターの結果を並べた PNG を作る
 ```
 
 ## ルール
@@ -18,4 +19,5 @@ docker compose run --rm dev python tools/make_icons.py     # icons/ を再生成
 - 画面の文言はひらがな中心(漢字は小4までに習うもの)。やさしい言葉で、エラーっぽい表現は避ける
 - ボタンは高さ 48px 以上、入力欄の文字は 16px 以上(iOS の自動ズーム防止)
 - 画像の向きは `<img>` のブラウザ自動補正に任せる(手動で回転すると二重回転になる)
+- まんがふうフィルターは js/manga-worker.js(classic Worker、import なし)。tools/run_manga.mjs から Node でも動くよう、DOM API は使わない
 - 画像は IndexedDB に `{ type, data: ArrayBuffer }` で保存する(Safari の Blob 保存の不具合対策)

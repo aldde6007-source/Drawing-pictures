@@ -32,6 +32,7 @@ export function buildBackupFile(characters) {
       id: c.id,
       ...Object.fromEntries(TEXT_FIELDS.map((k) => [k, c[k] || ''])),
       crop: c.crop || null,
+      style: c.style || null,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       image: packedToDataUrl(c.image),
@@ -86,6 +87,10 @@ export async function parseBackupFile(file) {
       const crop = c.crop;
       chara.crop = crop && [crop.cx, crop.cy, crop.d].every((v) => typeof v === 'number' && Number.isFinite(v))
         ? { cx: crop.cx, cy: crop.cy, d: crop.d }
+        : null;
+      const style = c.style;
+      chara.style = style && style.type === 'none' ? { type: 'none' }
+        : style && style.type === 'manga' && [1, 2, 3].includes(style.level) ? { type: 'manga', level: style.level }
         : null;
       chara.createdAt = num(c.createdAt, now - i);
       chara.updatedAt = num(c.updatedAt, chara.createdAt);
