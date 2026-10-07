@@ -4,6 +4,7 @@ import { Cropper, renderCropCanvas } from './cropper.js';
 import { Styler, normalizeStyle } from './styler.js';
 import { buildBackupFile, parseBackupFile } from './backup.js';
 import { Anime } from './anime.js';
+import { PinPad, makePin, matchPin } from './pin.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,10 +17,20 @@ const DETAIL_ROWS = [
   ['secret', 'ひみつ 🤫'],
 ];
 const DRAFT_DELAY = 400;
+const ICONS = ['🐰', '🐻', '🐱', '🐶', '🦄', '🐸', '🐼', '🦊', '🐧', '🐹', '🐨', '🐯'];
+const USER_PIN_LENGTH = 4;
+const PARENT_PIN_LENGTH = 6;
+const LOCK_AFTER = 5 * 60 * 1000; // これより ながく ほかの アプリに いたら、こうたい(ログアウト)する
+const MISS_LIMIT = 5;
+const MISS_WAIT = 30 * 1000;
+
+let session = null; // ログインちゅうの ひと { id, name, icon }
+let gate = 'users'; // ログインまえの がめん:users / user-new / parent / parent-move
 
 const cropper = new Cropper();
 const styler = new Styler();
-const anime = new Anime({ toast });
+const pinpad = new PinPad();
+const anime = new Anime({ toast, owner: () => session && session.id });
 const form = $('edit-form');
 
 // =====================================================================
@@ -57,9 +68,11 @@ function confirmDialog(text, { yes = 'はい', no = 'やめる', danger = false 
   const yesBtn = $('modal-yes');
   yesBtn.textContent = yes;
   yesBtn.className = danger ? 'btn btn-danger' : 'btn btn-primary';
-  $('modal-no').textContent = no;
+  // no: null なら「はい」だけの おしらせ
+  $('modal-no').hidden = !no;
+  $('modal-no').textContent = no || '';
   $('modal').hidden = false;
-  $('modal-no').focus();
+  (no ? $('modal-no') : yesBtn).focus();
   return new Promise((res) => { modalResolve = res; });
 }
 function closeModal(answer) {
@@ -74,6 +87,7 @@ $('modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('modal').hidden) closeModal(false);
+  else if (pinpad.isOpen) pinpad.close();
   else if (cropper.isOpen) cropper.close();
   else if (styler.isOpen) styler.close();
   else if (anime.pickerOpen) anime.closePicker();
@@ -94,7 +108,7 @@ async function withBusy(fn) {
 // =====================================================================
 // 画像の表示用 URL(つかいおわったら かたづける)
 // =====================================================================
-const viewUrls = { list: [], detail: [], edit: [] };
+const viewUrls = { list: [], detail: [], edit: [], move: [] };
 function urlFor(view, packed) {
   const blob = db.unpackBlob(packed);
   if (!blob) return null;
@@ -130,24 +144,37 @@ function parentHash(route) {
 let currentRoute = null;
 let renderSeq = 0;
 
+const VIEWS = ['users', 'welcome', 'user-new', 'parent', 'parent-move', 'list', 'detail', 'edit', 'settings', 'anime'];
+function showView(name) {
+  for (const v of VIEWS) $(`view-${v}`).hidden = v !== name;
+}
+
 async function render() {
   cropper.close();
   styler.close();
+  pinpad.close();
   if (modalResolve) closeModal(false);
   await leaveEdit();
   await anime.leave();
+  revokeUrls('move');
 
-  const route = parseRoute();
+  // ログインまえは、どの アドレスでも ログインの がめんを だす
+  const route = session ? parseRoute() : { view: gate };
   currentRoute = route;
   const seq = ++renderSeq;
 
-  for (const v of ['list', 'detail', 'edit', 'settings', 'anime']) $(`view-${v}`).hidden = v !== route.view;
-  $('back-btn').classList.toggle('is-hidden', route.view === 'list');
-  $('settings-btn').classList.toggle('is-hidden', route.view === 'settings' || route.view === 'edit');
+  showView(route.view);
+  $('back-btn').classList.toggle('is-hidden', !session || route.view === 'list');
+  $('settings-btn').classList.toggle('is-hidden', !session || route.view === 'settings' || route.view === 'edit');
+  $('title-who').textContent = session ? `${session.name}の` : 'わたしの';
   window.scrollTo(0, 0);
 
   try {
-    if (route.view === 'list') await renderList(seq);
+    if (route.view === 'users') await renderUsers(seq);
+    else if (route.view === 'user-new') enterUserNew();
+    else if (route.view === 'parent') await renderParent(seq);
+    else if (route.view === 'parent-move') await renderParentMove(seq);
+    else if (route.view === 'list') await renderList(seq);
     else if (route.view === 'detail') await renderDetail(route.id, seq);
     else if (route.view === 'edit') await enterEdit(route.id, seq);
     else if (route.view === 'settings') await renderSettings(seq);
@@ -165,12 +192,386 @@ $('back-btn').addEventListener('click', () => {
 });
 
 // =====================================================================
+// 0. だれが つかう?(ログイン・あたらしく つくる・おうちの ひとの メニュー)
+// =====================================================================
+const misses = new Map(); // まちがえた かず { count, until }
+
+/** あいことばを たしかめる。あっていたら true、ちがったら いれなおしの ことば */
+function checkPin(key, rec, pin) {
+  const m = misses.get(key) || { count: 0, until: 0 };
+  const wait = m.until - Date.now();
+  if (wait > 0) return `すこし まってから ためしてね(あと ${Math.ceil(wait / 1000)} びょう)`;
+  if (matchPin(rec, pin)) {
+    misses.delete(key);
+    return true;
+  }
+  m.count++;
+  if (m.count >= MISS_LIMIT) {
+    m.count = 0;
+    m.until = Date.now() + MISS_WAIT;
+    misses.set(key, m);
+    return `${MISS_WAIT / 1000} びょう まってから、もういちど ためしてね`;
+  }
+  misses.set(key, m);
+  return 'あれれ? ちがうみたい。もういちど いれてね';
+}
+
+/** あたらしい あいことばを 2かい いれて もらう(やめたら null) */
+async function askNewPin({ who, title, sub = '', length = USER_PIN_LENGTH }) {
+  const first = await pinpad.ask({ who, title, sub, length });
+  if (!first) return null;
+  return pinpad.ask({
+    who,
+    title: 'たしかめるよ。もういちど いれてね',
+    length,
+    check: (p) => p === first || 'さっきと ちがうみたい。もういちど いれてね',
+  });
+}
+
+function startSession(user) {
+  session = { id: user.id, name: user.name, icon: user.icon };
+  gate = 'users';
+  history.replaceState(null, '', '#/');
+  render();
+}
+
+function logout() {
+  if (!session) return;
+  session = null;
+  gate = 'users';
+  history.replaceState(null, '', '#/');
+  render();
+}
+$('logout-btn').addEventListener('click', logout);
+$('settings-logout').addEventListener('click', logout);
+
+function showGate(name) {
+  gate = name;
+  render();
+}
+
+async function renderUsers(seq) {
+  const [users, parent] = await Promise.all([db.getUsers(), db.getMeta('parent')]);
+  if (seq !== renderSeq) return;
+  if (!parent) {
+    // はじめて:おうちの ひとに じゅんびして もらう
+    const orphans = await db.countOrphans();
+    if (seq !== renderSeq) return;
+    showView('welcome');
+    $('welcome-orphans').hidden = !orphans;
+    $('welcome-orphans').textContent =
+      `いま ずかんに いる ${orphans} にんの キャラは、いったん さいしょに つくった ひとの キャラに なります。` +
+      'あとで「🔑 おうちの ひとへ」→「🏠 キャラの もちぬしを かえる」から、ひとりずつ わけられます。';
+    return;
+  }
+
+  const ul = $('user-list');
+  ul.textContent = '';
+  $('users-empty').hidden = users.length > 0;
+  for (const u of users) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'user-btn';
+    const icon = document.createElement('span');
+    icon.className = 'user-icon';
+    icon.textContent = u.icon;
+    const name = document.createElement('span');
+    name.textContent = u.name;
+    b.append(icon, name);
+    b.addEventListener('click', () => login(u));
+    li.append(b);
+    ul.append(li);
+  }
+}
+
+async function login(user) {
+  const pin = await pinpad.ask({
+    who: user.icon,
+    title: `${user.name} さんの あいことばを いれてね`,
+    length: USER_PIN_LENGTH,
+    check: (p) => checkPin(`user:${user.id}`, user.pin, p),
+    extraLabel: '🤔 わすれちゃった',
+    onExtra: () => confirmDialog(
+      'おうちの ひとに、あいことばを つくりなおして もらってね',
+      { yes: 'わかった', no: null },
+    ),
+  });
+  if (pin) startSession(user);
+}
+
+$('user-add').addEventListener('click', () => showGate('user-new'));
+
+$('welcome-start').addEventListener('click', async () => {
+  const pin = await askNewPin({
+    who: '🔑',
+    title: 'おうちの ひとの あいことばを きめてください',
+    sub: `すうじ ${PARENT_PIN_LENGTH} けた`,
+    length: PARENT_PIN_LENGTH,
+  });
+  if (!pin) return;
+  try {
+    await withBusy(() => db.putMeta({ key: 'parent', ...makePin(pin) }));
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  toast('じゅんび できました。つぎは こどもの ばんです');
+  showGate('user-new');
+});
+
+// ---- あたらしく つくる ----
+const userForm = $('user-form');
+let newIcon = ICONS[0];
+
+for (const icon of ICONS) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip';
+  b.dataset.icon = icon;
+  b.textContent = icon;
+  b.setAttribute('aria-pressed', 'false');
+  b.addEventListener('click', () => {
+    newIcon = icon;
+    syncIcons();
+  });
+  $('icon-chips').append(b);
+}
+
+function syncIcons() {
+  for (const b of $('icon-chips').children) b.setAttribute('aria-pressed', String(b.dataset.icon === newIcon));
+}
+
+function enterUserNew() {
+  userForm.elements.uname.value = '';
+  userForm.elements.uname.closest('.field').classList.remove('error');
+  $('user-note').textContent = '';
+  newIcon = ICONS[Math.floor(Math.random() * ICONS.length)];
+  syncIcons();
+}
+
+userForm.elements.uname.addEventListener('input', () => {
+  userForm.elements.uname.closest('.field').classList.remove('error');
+  $('user-note').textContent = '';
+});
+
+userForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = userForm.elements.uname.value.trim();
+  if (!name) {
+    $('user-note').textContent = 'なまえを いれてね';
+    userForm.elements.uname.closest('.field').classList.add('error');
+    userForm.elements.uname.focus();
+    return;
+  }
+  const icon = newIcon;
+  const pin = await askNewPin({
+    who: icon,
+    title: 'あいことばを きめてね',
+    sub: `すうじ ${USER_PIN_LENGTH} けた。じぶんだけの ひみつだよ 🤫`,
+  });
+  if (!pin) return;
+  const user = { id: db.newId(), name, icon, pin: makePin(pin), createdAt: Date.now() };
+  let adopted;
+  try {
+    adopted = await withBusy(() => db.createUser(user));
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  toast(adopted
+    ? `ようこそ、${name} さん! いままでの キャラ ${adopted} にんも いっしょだよ`
+    : `ようこそ、${name} さん! 🎉`);
+  startSession(user);
+});
+
+$('user-cancel').addEventListener('click', () => showGate('users'));
+
+// ---- おうちの ひとの メニュー ----
+$('parent-open').addEventListener('click', async () => {
+  let parent;
+  try {
+    parent = await db.getMeta('parent');
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  const pin = await pinpad.ask({
+    who: '🔑',
+    title: 'おうちの ひとの あいことば',
+    length: PARENT_PIN_LENGTH,
+    check: (p) => checkPin('parent', parent, p),
+  });
+  if (pin) showGate('parent');
+});
+
+async function renderParent(seq) {
+  const users = await db.getUsers();
+  const counts = await Promise.all(users.map((u) => db.countCharacters(u.id)));
+  if (seq !== renderSeq) return;
+  const ul = $('parent-users');
+  ul.textContent = '';
+  $('parent-empty').hidden = users.length > 0;
+  users.forEach((u, i) => {
+    const li = document.createElement('li');
+    li.className = 'parent-user';
+    const name = document.createElement('div');
+    name.className = 'parent-user-name';
+    name.textContent = `${u.icon} ${u.name}(キャラ ${counts[i]} にん)`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'btn btn-secondary';
+    reset.textContent = '🔢 あいことばを つくりなおす';
+    reset.addEventListener('click', () => resetUserPin(u));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn btn-danger';
+    del.textContent = '🗑 けす';
+    del.addEventListener('click', () => removeUser(u, counts[i]));
+    row.append(reset, del);
+    li.append(name, row);
+    ul.append(li);
+  });
+}
+
+async function resetUserPin(user) {
+  const pin = await askNewPin({ who: user.icon, title: `${user.name} さんの あたらしい あいことば` });
+  if (!pin) return;
+  try {
+    const latest = await db.getUser(user.id);
+    if (latest) await db.putUser({ ...latest, pin: makePin(pin) });
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  misses.delete(`user:${user.id}`);
+  toast('あいことばを つくりなおしました');
+}
+
+async function removeUser(user, count) {
+  const ok = await confirmDialog(
+    `「${user.name}」さんと、その キャラ ${count} にんを ぜんぶ けしますか?\nもとに もどせません`,
+    { yes: 'けす', danger: true },
+  );
+  if (!ok) return;
+  try {
+    await withBusy(() => db.deleteUser(user.id));
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  toast('けしました');
+  render();
+}
+
+$('parent-pin-change').addEventListener('click', async () => {
+  const pin = await askNewPin({
+    who: '🔑',
+    title: 'おうちの ひとの あたらしい あいことば',
+    sub: `すうじ ${PARENT_PIN_LENGTH} けた`,
+    length: PARENT_PIN_LENGTH,
+  });
+  if (!pin) return;
+  try {
+    await db.putMeta({ key: 'parent', ...makePin(pin) });
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  toast('おうちの ひとの あいことばを かえました');
+});
+
+$('parent-close').addEventListener('click', () => showGate('users'));
+
+// ---- キャラの もちぬしを かえる ----
+async function renderParentMove(seq) {
+  const [users, list] = await Promise.all([db.getUsers(), db.getEveryCharacter()]);
+  if (seq !== renderSeq) return;
+  const ul = $('move-list');
+  ul.textContent = '';
+  $('move-empty').hidden = list.length > 0;
+  const nameOf = new Map(users.map((u) => [u.id, u.name]));
+
+  for (const c of list) {
+    const li = document.createElement('li');
+    li.className = 'move-item';
+    const photo = document.createElement('div');
+    photo.className = 'card-photo';
+    const url = urlFor('move', c.image);
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.loading = 'lazy';
+      photo.append(img);
+    } else {
+      photo.textContent = '🖍';
+    }
+    const name = document.createElement('div');
+    name.className = 'move-name';
+    name.textContent = c.name || 'なまえなし';
+
+    const select = document.createElement('select');
+    select.className = 'move-select';
+    select.setAttribute('aria-label', `${c.name || 'なまえなし'} の もちぬし`);
+    if (!nameOf.has(c.ownerId)) {
+      const none = document.createElement('option');
+      none.value = '';
+      none.textContent = '(だれの でもない)';
+      select.append(none);
+    }
+    for (const u of users) {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.icon} ${u.name}`;
+      select.append(opt);
+    }
+    select.value = nameOf.has(c.ownerId) ? c.ownerId : '';
+    let current = select.value;
+    select.addEventListener('change', async () => {
+      const to = select.value;
+      if (!to) { select.value = current; return; }
+      try {
+        await db.moveCharacter(c.id, to);
+      } catch (err) {
+        console.error(err);
+        select.value = current;
+        toast(friendlyError(err));
+        return;
+      }
+      current = to;
+      // 「だれの でもない」は もう えらべないので けす
+      select.querySelector('option[value=""]')?.remove();
+      toast(`「${c.name || 'なまえなし'}」を ${nameOf.get(to)} さんの ずかんに うつしました`);
+    });
+
+    const body = document.createElement('div');
+    body.className = 'move-body';
+    body.append(name, select);
+    li.append(photo, body);
+    ul.append(li);
+  }
+}
+
+$('parent-move-open').addEventListener('click', () => showGate('parent-move'));
+$('parent-move-close').addEventListener('click', () => showGate('parent'));
+
+// =====================================================================
 // 1. ずかん(いちらん)
 // =====================================================================
 async function renderList(seq) {
-  const list = await db.getAllCharacters();
+  const list = await db.getAllCharacters(session.id);
   if (seq !== renderSeq) return;
   revokeUrls('list');
+  $('userbar-who').textContent = `${session.icon} ${session.name} さん`;
 
   const cards = $('cards');
   cards.textContent = '';
@@ -213,7 +614,7 @@ async function renderList(seq) {
 async function renderDetail(id, seq) {
   const c = await db.getCharacter(id);
   if (seq !== renderSeq) return;
-  if (!c) {
+  if (!c || c.ownerId !== session.id) {
     toast('そのキャラは みつからなかったよ');
     location.replace('#/');
     return;
@@ -265,10 +666,10 @@ async function renderDetail(id, seq) {
 // =====================================================================
 // 3. とうろく / なおす(下書きの自動保存つき)
 // =====================================================================
-let editing = null; // { key, id, base, original, image, crop, style, dirty, timer, writing, closed }
+let editing = null; // { key, id, owner, base, original, image, crop, style, dirty, timer, writing, closed }
 
 function emptyEditing(id) {
-  return { key: id ? `edit:${id}` : 'new', id, base: null, original: null, image: null, crop: null, style: null, dirty: false, timer: 0, writing: Promise.resolve(), closed: false };
+  return { key: id ? `edit:${id}` : `new:${session.id}`, id, owner: session.id, base: null, original: null, image: null, crop: null, style: null, dirty: false, timer: 0, writing: Promise.resolve(), closed: false };
 }
 
 async function enterEdit(id, seq) {
@@ -277,7 +678,7 @@ async function enterEdit(id, seq) {
 
   if (id) {
     state.base = await db.getCharacter(id);
-    if (!state.base) {
+    if (!state.base || state.base.ownerId !== state.owner) {
       toast('そのキャラは みつからなかったよ');
       location.replace('#/');
       return;
@@ -396,11 +797,20 @@ form.addEventListener('input', (e) => {
   markDirty();
 });
 
-// ページをとじる/ほかのアプリにいくとき、すぐ下書きを保存
+// ページをとじる/ほかのアプリにいくとき、すぐ下書きを保存。
+// ながく はなれていたら、もどったときに こうたい(ログインの がめん)にする
+let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'hidden') return;
-  saveDraftNow();
-  anime.saveNow();
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now();
+    saveDraftNow();
+    anime.saveNow();
+    return;
+  }
+  if (!hiddenAt || Date.now() - hiddenAt < LOCK_AFTER) return;
+  hiddenAt = 0;
+  if (session) logout();
+  else if (gate === 'parent' || gate === 'parent-move') showGate('users');
 });
 window.addEventListener('pagehide', () => { saveDraftNow(); anime.saveNow(); });
 
@@ -500,6 +910,7 @@ form.addEventListener('submit', async (e) => {
   const chara = {
     ...fields,
     id: state.id || db.newId(),
+    ownerId: state.owner,
     original: state.original,
     image: state.image,
     crop: state.crop,
@@ -539,17 +950,34 @@ async function cancelEdit() {
 $('edit-cancel').addEventListener('click', cancelEdit);
 
 // =====================================================================
-// 4. せってい(バックアップ)
+// 4. せってい(バックアップ・あいことば)
+//    バックアップは ログインちゅうの ひとの キャラだけを かきだす/いれかえる
 // =====================================================================
 async function renderSettings(seq) {
-  const list = await db.getAllCharacters();
+  const count = await db.countCharacters(session.id);
   let persisted = false;
   try { persisted = !!(navigator.storage && navigator.storage.persisted && await navigator.storage.persisted()); } catch { /* なにもしない */ }
   if (seq !== renderSeq) return;
   $('storage-info').textContent =
-    `いま ずかんに いるキャラ:${list.length} にん` +
+    `いま ずかんに いるキャラ:${count} にん` +
     (persisted ? '(この きかいに しっかり ほぞんされているよ)' : '');
 }
+
+$('pin-change').addEventListener('click', async () => {
+  if (!session) return;
+  const me = session;
+  const pin = await askNewPin({ who: me.icon, title: 'あたらしい あいことばを きめてね', sub: `すうじ ${USER_PIN_LENGTH} けた` });
+  if (!pin) return;
+  try {
+    const user = await db.getUser(me.id);
+    if (user) await db.putUser({ ...user, pin: makePin(pin) });
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err));
+    return;
+  }
+  toast('あいことばを かえたよ!');
+});
 
 function saveFile(file) {
   const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
@@ -583,9 +1011,9 @@ $('export-btn').addEventListener('click', async () => {
   let count = 0;
   try {
     await withBusy(async () => {
-      const list = await db.getAllCharacters();
+      const list = await db.getAllCharacters(session.id);
       count = list.length;
-      if (count) file = buildBackupFile(list);
+      if (count) file = buildBackupFile(list, session.name);
     });
   } catch (err) {
     console.error(err);
@@ -608,7 +1036,8 @@ $('import-input').addEventListener('change', async (e) => {
   const input = e.target;
   const file = input.files && input.files[0];
   input.value = '';
-  if (!file) return;
+  if (!file || !session) return;
+  const owner = session.id;
   let list;
   try {
     list = await withBusy(() => parseBackupFile(file));
@@ -617,14 +1046,14 @@ $('import-input').addEventListener('change', async (e) => {
     toast('この ファイルは よみこめなかったよ。キャラずかんの バックアップを えらんでね');
     return;
   }
-  const now = (await db.getAllCharacters()).length;
+  const now = await db.countCharacters(owner);
   const msg = now
     ? `いまの ${now} にんの キャラが きえて、\nファイルの ${list.length} にんに いれかわるよ。\nよみこんでいい?`
     : `ファイルの ${list.length} にんの キャラを よみこむよ。いい?`;
   const ok = await confirmDialog(msg, { yes: 'よみこむ', danger: now > 0 });
-  if (!ok) return;
+  if (!ok || !session || session.id !== owner) return;
   try {
-    await withBusy(() => db.replaceAllCharacters(list));
+    await withBusy(() => db.replaceCharactersOf(owner, list));
   } catch (err) {
     console.error(err);
     toast(friendlyError(err));

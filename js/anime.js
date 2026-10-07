@@ -1,7 +1,7 @@
 // 「うごかして あそぶ」がめん。
 // ずかんの えを 1まい つかって、アプリが ぴょんぴょん・てくてく などの うごきを つける。
 //
-// シーン(はいけい・キャラの ばしょ・うごき・ふきだし)は 下書きストアに 1つだけ ほぞんする。
+// シーン(はいけい・キャラの ばしょ・うごき・ふきだし)は 下書きストアに ひとり 1つずつ ほぞんする。
 // ぶたいは 論理座標 W×H(4:3)で かき、画面の 大きさに あわせて のばす。
 
 import * as db from './db.js';
@@ -11,7 +11,6 @@ import { BACKGROUNDS, paintBackground } from './scenery.js';
 
 const W = 800;
 const H = 600;
-const SCENE_KEY = 'anime';
 const MAX_ACTORS = 4;
 const SAVE_DELAY = 400;
 const SAY_MAX = 30;
@@ -171,8 +170,11 @@ function release(canvas) {
 // がめん
 // =====================================================================
 export class Anime {
-  constructor({ toast }) {
+  /** owner():ログインちゅうの ひとの id */
+  constructor({ toast, owner }) {
     this.toast = toast;
+    this.owner = owner;
+    this.sceneKey = '';
     this.canvas = $('stage');
     this.ctx = this.canvas.getContext('2d');
     this.bgCanvas = document.createElement('canvas');
@@ -247,8 +249,11 @@ export class Anime {
    * isCurrent() が false になったら(とちゅうで べつの がめんに いったら)なにもしない。
    */
   async enter(addId, isCurrent) {
-    const [saved, list] = await Promise.all([db.getDraft(SCENE_KEY), db.getAllCharacters()]);
+    const uid = this.owner();
+    const sceneKey = `anime:${uid}`;
+    const [saved, list] = await Promise.all([db.getDraft(sceneKey), db.getAllCharacters(uid)]);
     if (!isCurrent()) return;
+    this.sceneKey = sceneKey;
     if (!list.length) {
       this.toast('まだ キャラが いないよ。さきに とうろくしてね');
       location.replace('#/');
@@ -309,7 +314,7 @@ export class Anime {
     if (!this.scene || !this.dirty) return this.writing;
     this.dirty = false;
     const data = {
-      key: SCENE_KEY,
+      key: this.sceneKey,
       bg: this.scene.bg,
       actors: this.scene.actors.map(({ id, x, y, size, motion, flip, say }) => ({ id, x, y, size, motion, flip, say })),
       savedAt: Date.now(),

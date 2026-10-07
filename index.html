@@ -21,15 +21,84 @@
     <button type="button" class="icon-btn" id="back-btn" aria-label="もどる">
       <span aria-hidden="true">‹</span>
     </button>
-    <h1 class="title"><a href="#/" id="title-link">わたしの<br class="sp-only">キャラずかん</a></h1>
+    <h1 class="title"><a href="#/" id="title-link"><span id="title-who">わたしの</span><br class="sp-only">キャラずかん</a></h1>
     <a class="icon-btn" href="#/settings" id="settings-btn" aria-label="せってい">
       <span aria-hidden="true">⚙︎</span>
     </a>
   </header>
 
   <main id="main">
+    <!-- 0-1. だれが つかう? -->
+    <section class="view" id="view-users" hidden>
+      <h2 class="gate-title">だれが つかう?</h2>
+      <p class="users-empty" id="users-empty" hidden>まだ だれも いないよ。<br>「あたらしく つくる」から はじめてね</p>
+      <ul class="user-list" id="user-list"></ul>
+      <button type="button" class="btn btn-secondary btn-wide" id="user-add">＋ あたらしく つくる</button>
+      <button type="button" class="link-btn" id="parent-open">🔑 おうちの ひとへ</button>
+    </section>
+
+    <!-- 0-2. はじめて つかうとき(おうちの ひとへ) -->
+    <section class="view" id="view-welcome" hidden>
+      <div class="panel">
+        <h2 class="panel-title">🏠 おうちの ひとへ</h2>
+        <p>このアプリは、ひとり ずつ じぶんの ずかんを もてます。
+          ずかんを ひらくときは、こどもが きめた 4けたの「あいことば」を いれます。</p>
+        <p>さいしょに、おうちの ひと だけが しっている 6けたの すうじ(おうちの ひとの あいことば)を きめてください。
+          こどもが あいことばを わすれたときに、つくりなおす ために つかいます。</p>
+        <p id="welcome-orphans" hidden></p>
+        <button type="button" class="btn btn-primary btn-wide" id="welcome-start">🔑 あいことばを きめる</button>
+      </div>
+    </section>
+
+    <!-- 0-3. あたらしく つくる -->
+    <section class="view" id="view-user-new" hidden>
+      <form class="form" id="user-form" autocomplete="off" novalidate>
+        <h2 class="form-title">あたらしく つくる</h2>
+        <label class="field">
+          <span class="field-label">なまえ <span class="need">ひつよう</span></span>
+          <input type="text" name="uname" maxlength="12" enterkeyhint="done">
+        </label>
+        <div class="field">
+          <span class="field-label">マーク</span>
+          <div class="chip-grid icon-grid" id="icon-chips" role="group" aria-label="マーク"></div>
+        </div>
+        <p class="form-note" id="user-note" aria-live="polite"></p>
+        <div class="row">
+          <button type="button" class="btn btn-secondary" id="user-cancel">やめる</button>
+          <button type="submit" class="btn btn-primary">つぎへ ▶</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 0-4. おうちの ひとの メニュー -->
+    <section class="view" id="view-parent" hidden>
+      <div class="panel">
+        <h2 class="panel-title">🔑 おうちの ひとの メニュー</h2>
+        <p class="users-empty" id="parent-empty" hidden>まだ だれも いません</p>
+        <ul class="parent-users" id="parent-users"></ul>
+        <button type="button" class="btn btn-secondary btn-wide" id="parent-move-open">🏠 キャラの もちぬしを かえる</button>
+        <button type="button" class="btn btn-secondary btn-wide" id="parent-pin-change">🔑 おうちの ひとの あいことばを かえる</button>
+        <button type="button" class="btn btn-primary btn-wide" id="parent-close">おわる</button>
+      </div>
+    </section>
+
+    <!-- 0-5. キャラの もちぬしを かえる(おうちの ひと) -->
+    <section class="view" id="view-parent-move" hidden>
+      <div class="panel">
+        <h2 class="panel-title">🏠 キャラの もちぬしを かえる</h2>
+        <p>キャラごとに、だれの ずかんに いれるかを えらんでください。えらぶと すぐに うつります。</p>
+        <p class="users-empty" id="move-empty" hidden>まだ キャラが いません</p>
+        <ul class="move-list" id="move-list"></ul>
+        <button type="button" class="btn btn-primary btn-wide" id="parent-move-close">◀ メニューに もどる</button>
+      </div>
+    </section>
+
     <!-- 1. ずかん(いちらん) -->
     <section class="view" id="view-list" hidden>
+      <div class="userbar">
+        <span class="userbar-who" id="userbar-who"></span>
+        <button type="button" class="btn btn-secondary btn-small" id="logout-btn">👋 こうたい</button>
+      </div>
       <div class="empty" id="empty" hidden>
         <div class="empty-art" aria-hidden="true">✨📖✨</div>
         <p class="empty-title">さいしょのキャラを<br>とうろくしよう!</p>
@@ -130,6 +199,12 @@
         </label>
         <p class="small" id="storage-info"></p>
       </div>
+      <div class="panel settings-panel">
+        <h2 class="panel-title">🔢 あいことば</h2>
+        <p>ずかんを ひらくときの あいことばを かえられるよ。</p>
+        <button type="button" class="btn btn-secondary btn-wide" id="pin-change">🔢 あいことばを かえる</button>
+        <button type="button" class="btn btn-secondary btn-wide" id="settings-logout">👋 こうたい する</button>
+      </div>
     </section>
 
     <!-- 5. うごかして あそぶ -->
@@ -223,6 +298,30 @@
       <button type="button" class="btn btn-secondary" id="style-back">◀ きりなおす</button>
       <button type="button" class="btn btn-primary" id="style-ok">⭕ けってい</button>
     </div>
+  </div>
+
+  <!-- あいことばを いれる がめん -->
+  <div class="overlay pinpad" id="pinpad" hidden>
+    <div class="pin-who" id="pin-who" aria-hidden="true"></div>
+    <p class="pin-title" id="pin-title"></p>
+    <p class="pin-sub" id="pin-sub" hidden></p>
+    <div class="pin-dots" id="pin-dots" role="img"></div>
+    <p class="pin-note" id="pin-note" aria-live="polite"></p>
+    <div class="pin-keys">
+      <button type="button" class="pin-key" data-key="1">1</button>
+      <button type="button" class="pin-key" data-key="2">2</button>
+      <button type="button" class="pin-key" data-key="3">3</button>
+      <button type="button" class="pin-key" data-key="4">4</button>
+      <button type="button" class="pin-key" data-key="5">5</button>
+      <button type="button" class="pin-key" data-key="6">6</button>
+      <button type="button" class="pin-key" data-key="7">7</button>
+      <button type="button" class="pin-key" data-key="8">8</button>
+      <button type="button" class="pin-key" data-key="9">9</button>
+      <button type="button" class="pin-key pin-key-sub" data-key="cancel">やめる</button>
+      <button type="button" class="pin-key" data-key="0">0</button>
+      <button type="button" class="pin-key pin-key-sub" data-key="back" aria-label="1つ けす">⌫</button>
+    </div>
+    <button type="button" class="link-btn" id="pin-extra" hidden></button>
   </div>
 
   <!-- かくにん ダイアログ -->

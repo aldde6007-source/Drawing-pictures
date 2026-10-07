@@ -22,8 +22,8 @@ function packedToDataUrl(packed) {
   return `data:${packed.type};base64,${bufferToBase64(packed.data)}`;
 }
 
-/** キャラの配列から、バックアップ用の File をつくる */
-export function buildBackupFile(characters) {
+/** キャラの配列から、バックアップ用の File をつくる(who は ファイル名に いれる なまえ) */
+export function buildBackupFile(characters, who = '') {
   const data = {
     app: APP,
     format: FORMAT,
@@ -41,7 +41,9 @@ export function buildBackupFile(characters) {
   };
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  const name = `chara-zukan-${ymd}.json`;
+  // ファイル名に つかえない もじは のぞく
+  const safe = String(who).replace(/[\\/:*?"<>|\s.]/g, '').slice(0, 20);
+  const name = safe ? `chara-zukan-${safe}-${ymd}.json` : `chara-zukan-${ymd}.json`;
   return new File([JSON.stringify(data)], name, { type: 'application/json' });
 }
 

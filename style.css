@@ -163,6 +163,94 @@ main {
   .empty-art { animation: none; }
 }
 
+/* ===== だれが つかう? ===== */
+.gate-title { margin: 8px 0 16px; text-align: center; font-size: 24px; color: var(--pink-deep); }
+.users-empty { margin: 0 0 12px; text-align: center; color: var(--ink-soft); }
+.user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.user-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 140px;
+  padding: 16px 8px;
+  border: 3px solid transparent;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: 20px;
+  font-weight: bold;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.user-btn:active { transform: scale(0.97); }
+.user-btn:focus-visible { outline: none; border-color: var(--lavender); }
+.user-icon {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--pink-pale);
+  font-size: 46px;
+  line-height: 1;
+}
+.link-btn {
+  display: block;
+  min-height: 48px;
+  margin: 24px auto 0;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 16px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.icon-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.icon-grid .chip { font-size: 32px; }
+
+.parent-users { list-style: none; margin: 8px 0 0; padding: 0; }
+.parent-user { padding: 14px 0; border-top: 2px dashed var(--pink-pale); }
+.parent-user-name { font-size: 20px; font-weight: bold; overflow-wrap: anywhere; }
+.parent-user .row { margin-top: 8px; }
+.settings-panel { margin-top: 16px; }
+
+.move-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.move-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 2px dashed var(--pink-pale);
+}
+.move-item .card-photo { flex: none; width: 64px; margin: 0; border-width: 3px; font-size: 28px; }
+.move-body { flex: 1; min-width: 0; }
+.move-name { font-weight: bold; overflow-wrap: anywhere; }
+.move-select {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 3px solid var(--lavender);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 17px;
+}
+
+.userbar { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.userbar-who { flex: 1; min-width: 0; font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
+.btn-small { min-height: 48px; padding: 6px 16px; font-size: 16px; }
+
 /* ===== カードいちらん ===== */
 .count { margin: 0 4px 12px; color: var(--ink-soft); font-size: 16px; }
 
@@ -527,6 +615,64 @@ main {
 .chip-sm { min-height: 48px; font-size: 16px; }
 .chip[aria-pressed="true"] { background: var(--pink); border-color: #fff; color: #fff; }
 .chip:active { transform: scale(0.96); }
+
+/* あいことばを いれる */
+.pinpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: linear-gradient(160deg, #fff7fb, #efe8ff);
+}
+.pin-who {
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow);
+  font-size: 50px;
+  line-height: 1;
+}
+.pin-title { margin: 4px 0 0; max-width: 360px; font-size: 20px; font-weight: bold; text-align: center; }
+.pin-sub { margin: 0; max-width: 360px; color: var(--ink-soft); font-size: 16px; text-align: center; }
+.pin-dots { display: flex; gap: 14px; margin-top: 6px; }
+.pin-dot { width: 22px; height: 22px; border: 3px solid var(--pink); border-radius: 50%; background: #fff; }
+.pin-dot.on { background: var(--pink); }
+.pin-dots.shake { animation: shake 0.4s; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin-dots.shake { animation: none; }
+}
+.pin-note { min-height: 1.6em; margin: 0; color: #c4495b; font-size: 16px; font-weight: bold; text-align: center; }
+.pin-keys { display: grid; grid-template-columns: repeat(3, 72px); gap: 14px; }
+.pin-key {
+  width: 72px;
+  height: 72px;
+  border: 3px solid var(--lavender);
+  border-radius: 50%;
+  background: #fff;
+  font-size: 30px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.pin-key:active { transform: scale(0.94); background: var(--pink-pale); }
+.pin-key-sub { border-color: transparent; background: transparent; font-size: 16px; }
+.pin-key[data-key="back"] { font-size: 26px; }
+.pinpad .link-btn { margin-top: 4px; }
+@media (max-height: 600px) {
+  .pin-who { width: 60px; height: 60px; font-size: 36px; }
+  .pin-keys { grid-template-columns: repeat(3, 60px); gap: 10px; }
+  .pin-key { width: 60px; height: 60px; font-size: 26px; }
+}
 
 .modal-wrap {
   display: grid;
