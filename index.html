@@ -37,6 +37,7 @@
         <a class="btn btn-primary btn-big" href="#/new">＋ キャラをとうろくする</a>
       </div>
       <p class="count" id="count" hidden></p>
+      <a class="btn btn-secondary btn-wide list-anime" href="#/anime" id="list-anime" hidden>🎬 うごかして あそぶ</a>
       <ul class="cards" id="cards"></ul>
       <a class="fab" href="#/new" id="fab" hidden aria-label="キャラをふやす">＋</a>
     </section>
@@ -50,6 +51,7 @@
         <h2 class="detail-name" id="detail-name"></h2>
         <p class="detail-catch" id="detail-catch" hidden></p>
         <dl class="detail-list" id="detail-list"></dl>
+        <a class="btn btn-primary btn-wide detail-anime" id="detail-anime">🎬 うごかして あそぶ</a>
         <div class="row">
           <a class="btn btn-secondary" id="detail-edit">✏️ なおす</a>
           <button type="button" class="btn btn-danger" id="detail-delete">🗑 けす</button>
@@ -129,6 +131,59 @@
         <p class="small" id="storage-info"></p>
       </div>
     </section>
+
+    <!-- 5. うごかして あそぶ -->
+    <section class="view" id="view-anime" hidden>
+      <div class="stage-wrap">
+        <canvas id="stage" aria-label="キャラが うごく ぶたい"></canvas>
+        <button type="button" class="stage-play" id="anime-play" aria-label="とめる">⏸</button>
+      </div>
+      <p class="stage-help" id="stage-help" aria-live="polite"></p>
+
+      <div class="panel anime-panel" id="actor-panel" hidden>
+        <h2 class="panel-title" id="actor-title"></h2>
+        <div class="chip-grid" id="motion-chips" role="group" aria-label="うごき">
+          <button type="button" class="chip" data-motion="jump" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🐰</span>ぴょんぴょん</button>
+          <button type="button" class="chip" data-motion="walk" aria-pressed="false"><span class="chip-icon" aria-hidden="true">👣</span>てくてく</button>
+          <button type="button" class="chip" data-motion="float" aria-pressed="false"><span class="chip-icon" aria-hidden="true">☁️</span>ふわふわ</button>
+          <button type="button" class="chip" data-motion="shake" aria-pressed="false"><span class="chip-icon" aria-hidden="true">💦</span>ぷるぷる</button>
+          <button type="button" class="chip" data-motion="spin" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🌀</span>くるくる</button>
+          <button type="button" class="chip" data-motion="stretch" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🌱</span>のびのび</button>
+          <button type="button" class="chip" data-motion="dance" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🎵</span>のりのり</button>
+          <button type="button" class="chip" data-motion="heart" aria-pressed="false"><span class="chip-icon" aria-hidden="true">💓</span>どきどき</button>
+          <button type="button" class="chip" data-motion="stop" aria-pressed="false"><span class="chip-icon" aria-hidden="true">✋</span>とまる</button>
+        </div>
+        <label class="field">
+          <span class="field-label">おおきさ</span>
+          <span class="size-row">
+            <span aria-hidden="true">🔍−</span>
+            <input type="range" id="actor-size" min="20" max="80" value="42">
+            <span aria-hidden="true">＋</span>
+          </span>
+        </label>
+        <label class="field">
+          <span class="field-label">ふきだし 💬 <span class="opt">なくてもOK</span></span>
+          <input type="text" id="actor-say" maxlength="30" placeholder="セリフを かいてね" enterkeyhint="done">
+        </label>
+        <div class="row">
+          <button type="button" class="btn btn-secondary" id="actor-flip">↔️ むきを かえる</button>
+          <button type="button" class="btn btn-secondary" id="actor-remove">👋 ばいばい</button>
+        </div>
+      </div>
+
+      <div class="panel anime-panel">
+        <h2 class="panel-title">🏞 はいけい</h2>
+        <div class="chip-grid" id="bg-chips" role="group" aria-label="はいけい">
+          <button type="button" class="chip" data-bg="white" aria-pressed="false"><span class="chip-icon" aria-hidden="true">⬜</span>しろ</button>
+          <button type="button" class="chip" data-bg="sky" aria-pressed="false"><span class="chip-icon" aria-hidden="true">☀️</span>そら</button>
+          <button type="button" class="chip" data-bg="field" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🌷</span>のはら</button>
+          <button type="button" class="chip" data-bg="sea" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🌊</span>うみ</button>
+          <button type="button" class="chip" data-bg="night" aria-pressed="false"><span class="chip-icon" aria-hidden="true">🌙</span>よる</button>
+          <button type="button" class="chip" data-bg="dream" aria-pressed="false"><span class="chip-icon" aria-hidden="true">💖</span>ゆめ</button>
+        </div>
+        <button type="button" class="btn btn-primary btn-wide" id="actor-add">＋ なかまを よぶ</button>
+      </div>
+    </section>
   </main>
 
   <!-- きりぬき がめん -->
@@ -177,6 +232,17 @@
       <div class="row">
         <button type="button" class="btn btn-secondary" id="modal-no">やめる</button>
         <button type="button" class="btn btn-primary" id="modal-yes">はい</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- なかまを よぶ -->
+  <div class="overlay modal-wrap" id="picker" hidden>
+    <div class="modal picker" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <p class="modal-text" id="picker-title">だれを よぶ?</p>
+      <ul class="picker-list" id="picker-list"></ul>
+      <div class="row">
+        <button type="button" class="btn btn-secondary" id="picker-cancel">やめる</button>
       </div>
     </div>
   </div>

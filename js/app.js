@@ -3,6 +3,7 @@ import { loadImage, resizeToJpeg } from './image.js';
 import { Cropper, renderCropCanvas } from './cropper.js';
 import { Styler, normalizeStyle } from './styler.js';
 import { buildBackupFile, parseBackupFile } from './backup.js';
+import { Anime } from './anime.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,6 +19,7 @@ const DRAFT_DELAY = 400;
 
 const cropper = new Cropper();
 const styler = new Styler();
+const anime = new Anime({ toast });
 const form = $('edit-form');
 
 // =====================================================================
@@ -74,6 +76,7 @@ document.addEventListener('keydown', (e) => {
   if (!$('modal').hidden) closeModal(false);
   else if (cropper.isOpen) cropper.close();
   else if (styler.isOpen) styler.close();
+  else if (anime.pickerOpen) anime.closePicker();
 });
 
 let busyCount = 0;
@@ -113,11 +116,13 @@ function parseRoute() {
   if (name === 'new') return { view: 'edit', id: null };
   if (name === 'edit' && id) return { view: 'edit', id: decodeURIComponent(id) };
   if (name === 'c' && id) return { view: 'detail', id: decodeURIComponent(id) };
+  if (name === 'anime') return { view: 'anime', id: id ? decodeURIComponent(id) : null };
   if (name === 'settings') return { view: 'settings' };
   return { view: 'list' };
 }
 
 function parentHash(route) {
+  if (route.view === 'anime' && route.id) return `#/c/${encodeURIComponent(route.id)}`;
   if (route.view === 'edit' && route.id) return `#/c/${encodeURIComponent(route.id)}`;
   return '#/';
 }
@@ -130,12 +135,13 @@ async function render() {
   styler.close();
   if (modalResolve) closeModal(false);
   await leaveEdit();
+  await anime.leave();
 
   const route = parseRoute();
   currentRoute = route;
   const seq = ++renderSeq;
 
-  for (const v of ['list', 'detail', 'edit', 'settings']) $(`view-${v}`).hidden = v !== route.view;
+  for (const v of ['list', 'detail', 'edit', 'settings', 'anime']) $(`view-${v}`).hidden = v !== route.view;
   $('back-btn').classList.toggle('is-hidden', route.view === 'list');
   $('settings-btn').classList.toggle('is-hidden', route.view === 'settings' || route.view === 'edit');
   window.scrollTo(0, 0);
@@ -145,6 +151,7 @@ async function render() {
     else if (route.view === 'detail') await renderDetail(route.id, seq);
     else if (route.view === 'edit') await enterEdit(route.id, seq);
     else if (route.view === 'settings') await renderSettings(seq);
+    else if (route.view === 'anime') await anime.enter(route.id, () => seq === renderSeq);
   } catch (err) {
     console.error(err);
     toast(friendlyError(err));
@@ -171,6 +178,7 @@ async function renderList(seq) {
   $('empty').hidden = !empty;
   $('fab').hidden = empty;
   $('count').hidden = empty;
+  $('list-anime').hidden = empty;
   $('count').textContent = `ぜんぶで ${list.length} にんの キャラが いるよ`;
 
   for (const c of list) {
@@ -238,6 +246,7 @@ async function renderDetail(id, seq) {
   }
 
   $('detail-edit').href = `#/edit/${encodeURIComponent(c.id)}`;
+  $('detail-anime').href = `#/anime/${encodeURIComponent(c.id)}`;
   $('detail-delete').onclick = async () => {
     const ok = await confirmDialog(`ほんとうに けす?\n「${c.name || 'なまえなし'}」は もとに もどせないよ`, { yes: 'けす', danger: true });
     if (!ok) return;
@@ -388,8 +397,12 @@ form.addEventListener('input', (e) => {
 });
 
 // ページをとじる/ほかのアプリにいくとき、すぐ下書きを保存
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveDraftNow(); });
-window.addEventListener('pagehide', () => saveDraftNow());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden') return;
+  saveDraftNow();
+  anime.saveNow();
+});
+window.addEventListener('pagehide', () => { saveDraftNow(); anime.saveNow(); });
 
 /**
  * きりぬき → えの かんじ の じゅんに えらんでもらう。
@@ -646,7 +659,7 @@ function registerServiceWorker() {
       actionLabel: 'あたらしくする',
       sticky: true,
       onAction: async () => {
-        await saveDraftNow();
+        await Promise.all([saveDraftNow(), anime.saveNow()]);
         worker.postMessage({ type: 'SKIP_WAITING' });
       },
     });
